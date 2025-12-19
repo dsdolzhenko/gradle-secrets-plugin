@@ -1,100 +1,97 @@
 package io.github.dsdolzhenko.secrets
 
-import org.gradle.api.Project
+import org.gradle.api.model.ObjectFactory
 import org.gradle.api.provider.Property
 import org.gradle.api.provider.SetProperty
+import javax.inject.Inject
 
 /**
  * Extension for configuring the Secrets plugin
  */
-abstract class SecretsExtension(private val project: Project) {
+abstract class SecretsExtension @Inject constructor(objects: ObjectFactory) {
     /**
      * Enable or disable the plugin. Default: true
      */
-    abstract val enabled: Property<Boolean>
+    val enabled: Property<Boolean> = objects.property(Boolean::class.java)
+        .convention(true)
 
     /**
      * Inject secrets into system properties. Default: true
      */
-    abstract val injectSystemProperties: Property<Boolean>
+    val injectSystemProperties: Property<Boolean> = objects.property(Boolean::class.java)
+        .convention(true)
 
     /**
      * Inject secrets into environment variables. Default: true
      */
-    abstract val injectEnvironmentVariables: Property<Boolean>
+    val injectEnvironmentVariables: Property<Boolean> = objects.property(Boolean::class.java)
+        .convention(true)
 
     /**
      * Inject secrets into project properties. Default: true
      */
-    abstract val injectProjectProperties: Property<Boolean>
+    val injectProjectProperties: Property<Boolean> = objects.property(Boolean::class.java)
+        .convention(true)
 
     /**
      * Fail the build if secret resolution fails. Default: true
      */
-    abstract val failOnError: Property<Boolean>
+    val failOnError: Property<Boolean> = objects.property(Boolean::class.java)
+        .convention(true)
 
     /**
      * Clear secrets from memory after each task. Default: false
      * (Secrets are cached during the build for performance)
      */
-    abstract val clearSecretsAfterTask: Property<Boolean>
+    val clearSecretsAfterTask: Property<Boolean> = objects.property(Boolean::class.java)
+        .convention(false)
 
     /**
      * Tasks to exclude from secret injection
      */
-    abstract val excludedTasks: SetProperty<String>
+    val excludedTasks: SetProperty<String> = objects.setProperty(String::class.java)
 
     /**
      * Path to 1Password CLI executable. Default: "op"
      */
-    abstract val cliPath: Property<String>
+    val cliPath: Property<String> = objects.property(String::class.java)
+        .convention("op")
 
     /**
      * 1Password account identifier (optional)
      * If not set, uses the currently signed-in account
      */
-    abstract val account: Property<String>
+    val account: Property<String> = objects.property(String::class.java)
 
     /**
      * Pattern for detecting 1Password references
      * Default: op://[vault]/[item]/[field]
      */
-    abstract val referencePattern: Property<String>
+    val referencePattern: Property<String> = objects.property(String::class.java)
+        .convention("op://[^\\s]+")
 
     /**
      * Timeout for 1Password CLI calls in seconds. Default: 30
      */
-    abstract val cliTimeout: Property<Int>
+    val cliTimeout: Property<Int> = objects.property(Int::class.java)
+        .convention(30)
 
     /**
      * Properties to explicitly include for injection
      * If empty, all properties with references are processed
      */
-    abstract val includedProperties: SetProperty<String>
+    val includedProperties: SetProperty<String> = objects.setProperty(String::class.java)
 
     /**
      * Properties to explicitly exclude from injection
      */
-    abstract val excludedProperties: SetProperty<String>
+    val excludedProperties: SetProperty<String> = objects.setProperty(String::class.java)
 
     /**
      * Enable verbose logging for debugging. Default: false
      */
-    abstract val verbose: Property<Boolean>
-
-    init {
-        // Set defaults
-        enabled.convention(true)
-        injectSystemProperties.convention(true)
-        injectEnvironmentVariables.convention(true)
-        injectProjectProperties.convention(true)
-        failOnError.convention(true)
-        clearSecretsAfterTask.convention(false)
-        cliPath.convention("op")
-        referencePattern.convention("op://[^\\s]+")
-        cliTimeout.convention(30)
-        verbose.convention(false)
-    }
+    val verbose: Property<Boolean> = objects.property(Boolean::class.java)
+        .convention(false)
 
     /**
      * Convenience method to exclude tasks

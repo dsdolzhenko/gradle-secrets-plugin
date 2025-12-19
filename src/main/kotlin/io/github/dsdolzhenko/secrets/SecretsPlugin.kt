@@ -12,8 +12,7 @@ class SecretsPlugin : Plugin<Project> {
         // Create the extension for configuration
         val extension = project.extensions.create(
             "secrets",
-            SecretsExtension::class.java,
-            project
+            SecretsExtension::class.java
         )
 
         // Configure after project evaluation to ensure the extension is configured
