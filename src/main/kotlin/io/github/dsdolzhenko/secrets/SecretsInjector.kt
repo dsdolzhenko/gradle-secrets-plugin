@@ -40,7 +40,7 @@ class SecretsInjector(
                         
                         if (extension.verbose.get()) {
                             logger.lifecycle(
-                                "Injected 1Password secret into system property: $propertyName"
+                                "Injected secret into system property: $propertyName"
                             )
                         }
                     } catch (e: Exception) {
@@ -92,7 +92,7 @@ class SecretsInjector(
                             
                             if (extension.verbose.get()) {
                                 logger.lifecycle(
-                                    "Injected 1Password secret into environment variable: $name"
+                                    "Injected secret into environment variable: $name"
                                 )
                             }
                         } catch (e: Exception) {
@@ -111,7 +111,7 @@ class SecretsInjector(
             
             if (envsToInject.isNotEmpty()) {
                 logger.debug(
-                    "Injected ${envsToInject.size} 1Password secrets into task environment"
+                    "Injected ${envsToInject.size} secrets into task environment"
                 )
             }
         } else {
@@ -139,7 +139,7 @@ class SecretsInjector(
                         
                         if (extension.verbose.get()) {
                             logger.lifecycle(
-                                "Injected 1Password secret into project property: $propertyName"
+                                "Injected secret into project property: $propertyName"
                             )
                         }
                     } catch (e: Exception) {
@@ -162,7 +162,7 @@ class SecretsInjector(
         
         if (propertiesToInject.isNotEmpty()) {
             logger.debug(
-                "Injected ${propertiesToInject.size} 1Password secrets into project properties"
+                "Injected ${propertiesToInject.size} secrets into project properties"
             )
         }
     }

@@ -6,7 +6,7 @@ import org.gradle.api.logging.Logger
 import org.gradle.api.tasks.TaskState
 
 /**
- * Listener that injects 1Password secrets before task execution
+ * Listener that injects secret values before task execution
  */
 class SecretsTaskExecutionListener(
     private val logger: Logger,
@@ -21,12 +21,12 @@ class SecretsTaskExecutionListener(
         
         // Skip if the task is in the exclusion list
         if (extension.excludedTasks.get().contains(task.name)) {
-            logger.debug("Skipping 1Password injection for excluded task: ${task.name}")
+            logger.debug("Skipping secrets injection for excluded task: ${task.name}")
             return
         }
         
         try {
-            logger.debug("Injecting 1Password secrets for task: ${task.name}")
+            logger.debug("Injecting secrets for task: ${task.name}")
             
             // Inject into system properties
             if (extension.injectSystemProperties.get()) {
@@ -46,9 +46,9 @@ class SecretsTaskExecutionListener(
         } catch (e: Exception) {
             val failOnError = extension.failOnError.get()
             if (failOnError) {
-                throw SecretsException("Failed to inject 1Password secrets", e)
+                throw SecretsException("Failed to inject secrets", e)
             } else {
-                logger.warn("Failed to inject 1Password secrets: ${e.message}")
+                logger.warn("Failed to inject secrets: ${e.message}")
             }
         }
     }
