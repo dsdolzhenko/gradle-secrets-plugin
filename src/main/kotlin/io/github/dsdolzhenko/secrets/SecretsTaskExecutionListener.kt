@@ -13,36 +13,36 @@ class SecretsTaskExecutionListener(
     private val extension: SecretsExtension,
     private val secretsInjector: SecretsInjector,
 ) : TaskExecutionListener {
-    
+
     override fun beforeExecute(task: Task) {
         if (!extension.enabled.get()) {
             return
         }
-        
+
         // Skip if the task is in the exclusion list
         if (extension.excludedTasks.get().contains(task.name)) {
             logger.debug("Skipping secrets injection for excluded task: ${task.name}")
             return
         }
-        
+
         try {
             logger.debug("Injecting secrets for task: ${task.name}")
-            
+
             // Inject into system properties
             if (extension.injectSystemProperties.get()) {
                 secretsInjector.injectSystemProperties()
             }
-            
+
             // Inject into environment variables
             if (extension.injectEnvironmentVariables.get()) {
                 secretsInjector.injectEnvironmentVariables(task)
             }
-            
+
             // Inject into project properties
             if (extension.injectProjectProperties.get()) {
                 secretsInjector.injectProjectProperties()
             }
-            
+
         } catch (e: Exception) {
             val failOnError = extension.failOnError.get()
             if (failOnError) {
@@ -52,7 +52,7 @@ class SecretsTaskExecutionListener(
             }
         }
     }
-    
+
     override fun afterExecute(task: Task, state: TaskState) {
         // Cleanup if needed
         if (extension.clearSecretsAfterTask.get()) {

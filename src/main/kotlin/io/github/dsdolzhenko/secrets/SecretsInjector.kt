@@ -14,17 +14,17 @@ class SecretsInjector(
     private val extension: SecretsExtension,
     private val secretsResolver: SecretsResolver
 ) {
-    
+
     private val originalValues = ConcurrentHashMap<String, String>()
     private val injectedProperties = ConcurrentHashMap<String, MutableSet<String>>()
-    
+
     /**
      * Injects secrets into system properties
      */
     fun injectSystemProperties() {
         val systemProperties = System.getProperties()
         val propertiesToInject = mutableMapOf<String, String>()
-        
+
         systemProperties.stringPropertyNames().forEach { propertyName ->
             if (shouldProcessProperty(propertyName, extension)) {
                 val value = systemProperties.getProperty(propertyName)
@@ -32,12 +32,12 @@ class SecretsInjector(
                     try {
                         // Store original value
                         originalValues.putIfAbsent(propertyName, value)
-                        
+
                         // Resolve and inject
                         val resolvedValue = secretsResolver.resolveReferences(value)
-                        
+
                         propertiesToInject[propertyName] = resolvedValue
-                        
+
                         if (extension.verbose.get()) {
                             logger.lifecycle(
                                 "Injected secret into system property: $propertyName"
@@ -52,19 +52,19 @@ class SecretsInjector(
                 }
             }
         }
-        
+
         // Apply all changes at once
         propertiesToInject.forEach { (name, value) ->
             System.setProperty(name, value)
         }
-        
+
         if (propertiesToInject.isNotEmpty()) {
             logger.debug(
                 "Injected ${propertiesToInject.size} 1Password secrets into system properties"
             )
         }
     }
-    
+
     /**
      * Injects secrets into environment variables for a task
      * Note: We can't modify actual env vars, but we can modify task environment
@@ -76,20 +76,20 @@ class SecretsInjector(
         } catch (e: Exception) {
             null
         }
-        
+
         if (envProperty != null) {
             val injectedVars = mutableSetOf<String>()
             val envsToInject = mutableMapOf<String, String>()
-            
+
             envProperty.forEach { (name, value) ->
                 if (value is String && shouldProcessProperty(name, extension)) {
                     if (secretsResolver.containsReference(value)) {
                         try {
                             val resolvedValue = secretsResolver.resolveReferences(value)
-                            
+
                             envsToInject[name] = resolvedValue
                             injectedVars.add(name)
-                            
+
                             if (extension.verbose.get()) {
                                 logger.lifecycle(
                                     "Injected secret into environment variable: $name"
@@ -104,11 +104,11 @@ class SecretsInjector(
                     }
                 }
             }
-            
+
             // Apply changes
             envProperty.putAll(envsToInject)
             injectedProperties[task.path] = injectedVars
-            
+
             if (envsToInject.isNotEmpty()) {
                 logger.debug(
                     "Injected ${envsToInject.size} secrets into task environment"
@@ -118,25 +118,25 @@ class SecretsInjector(
             logger.debug("Task ${task.name} does not support environment property injection")
         }
     }
-    
+
     /**
      * Injects secrets into project properties
      */
     fun injectProjectProperties() {
         val propertiesToInject = mutableMapOf<String, Any>()
-        
+
         project.properties.forEach { (propertyName, value) ->
             if (value is String && shouldProcessProperty(propertyName, extension)) {
                 if (secretsResolver.containsReference(value)) {
                     try {
                         // Store original value
                         originalValues.putIfAbsent(propertyName, value)
-                        
+
                         // Resolve and inject
                         val resolvedValue = secretsResolver.resolveReferences(value)
-                        
+
                         propertiesToInject[propertyName] = resolvedValue
-                        
+
                         if (extension.verbose.get()) {
                             logger.lifecycle(
                                 "Injected secret into project property: $propertyName"
@@ -151,7 +151,7 @@ class SecretsInjector(
                 }
             }
         }
-        
+
         // Note: Project properties are typically read-only after initialization
         // This will work for extra properties set via ext
         propertiesToInject.forEach { (name, value) ->
@@ -159,35 +159,35 @@ class SecretsInjector(
                 project.extensions.extraProperties.set(name, value)
             }
         }
-        
+
         if (propertiesToInject.isNotEmpty()) {
             logger.debug(
                 "Injected ${propertiesToInject.size} secrets into project properties"
             )
         }
     }
-    
+
     /**
      * Clears injected secrets from the task
      */
     fun clearInjectedSecrets(task: Task) {
         val injectedVars = injectedProperties.remove(task.path) ?: return
-        
+
         val envProperty = try {
             task.javaClass.getMethod("getEnvironment").invoke(task) as? MutableMap<String, Any>
         } catch (e: Exception) {
             null
         }
-        
+
         envProperty?.let { env ->
             injectedVars.forEach { varName ->
                 env.remove(varName)
             }
         }
-        
+
         logger.debug("Cleared ${injectedVars.size} injected secrets from task ${task.name}")
     }
-    
+
     /**
      * Determines if a property should be processed based on include/exclude lists
      */
@@ -196,12 +196,12 @@ class SecretsInjector(
         if (extension.excludedProperties.get().contains(propertyName)) {
             return false
         }
-        
+
         // If the include list is specified, property must be in it
         val includeList = extension.includedProperties.get()
         return !(includeList.isNotEmpty() && !includeList.contains(propertyName))
     }
-    
+
     /**
      * Restores original property values
      */

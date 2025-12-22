@@ -16,7 +16,7 @@ class SecretsOnePasswordResolver(
     private val account: String? = null,
     private val timeout: Int = 30
 ) : SecretsResolver {
-    
+
     private val secretCache = ConcurrentHashMap<String, String>()
     private val referencePattern = Pattern.compile("op://([^/]+)/([^/]+)/([^\\s\"']+)")
 
@@ -26,7 +26,7 @@ class SecretsOnePasswordResolver(
     override fun resolveReferences(text: String): String {
         val matcher = referencePattern.matcher(text)
         val result = StringBuffer()
-        
+
         while (matcher.find()) {
             val reference = matcher.group(0)
             try {
@@ -38,24 +38,24 @@ class SecretsOnePasswordResolver(
             }
         }
         matcher.appendTail(result)
-        
+
         return result.toString()
     }
-    
+
     /**
      * Checks if a string contains any 1Password references
      */
     override fun containsReference(text: String): Boolean {
         return referencePattern.matcher(text).find()
     }
-    
+
     /**
      * Validates 1Password reference format
      */
     fun isValidReference(reference: String): Boolean {
         return referencePattern.matcher(reference).matches()
     }
-    
+
     /**
      * Clears the secret cache
      */
@@ -92,38 +92,38 @@ class SecretsOnePasswordResolver(
             throw SecretsException("Failed to resolve 1Password reference: $reference", e)
         }
     }
-    
+
     private fun buildCommand(
         reference: String,
         cliPath: String,
         account: String?
     ): List<String> {
         val command = mutableListOf(cliPath, "read", reference)
-        
+
         if (account != null) {
             command.add("--account")
             command.add(account)
         }
-        
+
         return command
     }
-    
+
     private fun executeCommand(command: List<String>, timeout: Int): String {
         logger.debug("Executing command: ${command.joinToString(" ")}")
-        
+
         val process = ProcessBuilder(command)
             .redirectErrorStream(false)
             .start()
-        
+
         val completed = process.waitFor(timeout.toLong(), TimeUnit.SECONDS)
-        
+
         if (!completed) {
             process.destroyForcibly()
             throw SecretsException("1Password CLI command timed out after $timeout seconds")
         }
-        
+
         val exitCode = process.exitValue()
-        
+
         if (exitCode != 0) {
             val errorOutput = BufferedReader(InputStreamReader(process.errorStream))
                 .readText()
@@ -132,7 +132,7 @@ class SecretsOnePasswordResolver(
                 "1Password CLI command failed with exit code $exitCode: $errorOutput"
             )
         }
-        
+
         return BufferedReader(InputStreamReader(process.inputStream))
             .readText()
             .trim()
