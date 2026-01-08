@@ -17,6 +17,8 @@ class SecretsOnePasswordResolver(
     private val timeout: Int = 30
 ) : SecretsResolver {
 
+    override fun getName(): String = "1Password"
+
     private val secretCache = ConcurrentHashMap<String, String>()
     private val referencePattern = Pattern.compile("op://([^/]+)/([^/]+)/([^\\s\"']+)")
 
@@ -59,7 +61,7 @@ class SecretsOnePasswordResolver(
     /**
      * Clears the secret cache
      */
-    fun clearCache() {
+    override fun clearCache() {
         secretCache.clear()
         logger.debug("Secret cache cleared")
     }
