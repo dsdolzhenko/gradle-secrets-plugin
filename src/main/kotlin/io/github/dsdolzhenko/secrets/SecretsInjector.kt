@@ -3,6 +3,7 @@ package io.github.dsdolzhenko.secrets
 import org.gradle.api.Project
 import org.gradle.api.Task
 import org.gradle.api.logging.Logger
+import org.gradle.process.ProcessForkOptions
 import java.util.concurrent.ConcurrentHashMap
 
 /**
@@ -16,7 +17,7 @@ class SecretsInjector(
 ) {
 
     private val originalValues = ConcurrentHashMap<String, String>()
-    private val injectedProperties = ConcurrentHashMap<String, MutableSet<String>>()
+    private val injectedVariables = ConcurrentHashMap<String, MutableSet<String>>()
 
     /**
      * Injects secrets into system properties
@@ -67,56 +68,48 @@ class SecretsInjector(
 
     /**
      * Injects secrets into environment variables for a task
-     * Note: We can't modify actual env vars, but we can modify task environment
+     * Note: We can't modify actual env vars, but we can modify the task environment
      */
     fun injectEnvironmentVariables(task: Task) {
-        // Try to access environment property if the task supports it
-        val envProperty = try {
-            task.javaClass.getMethod("getEnvironment").invoke(task) as? MutableMap<String, Any>
-        } catch (e: Exception) {
-            null
+        if (task !is ProcessForkOptions) {
+            logger.debug("Task ${task.name} does not support environment property injection")
+            return
         }
 
-        if (envProperty != null) {
-            val injectedVars = mutableSetOf<String>()
-            val envsToInject = mutableMapOf<String, String>()
+        val environment = task.environment.orEmpty().toMutableMap()
 
-            envProperty.forEach { (name, value) ->
-                if (value is String && shouldProcessProperty(name, extension)) {
-                    if (secretsResolver.containsReference(value)) {
-                        try {
-                            val resolvedValue = secretsResolver.resolveReferences(value)
+        val injectedVars = mutableSetOf<String>()
+        val envsToInject = mutableMapOf<String, String>()
 
-                            envsToInject[name] = resolvedValue
-                            injectedVars.add(name)
+        environment.forEach { (name, value) ->
+            if (value is String && shouldProcessProperty(name, extension) && secretsResolver.containsReference(value)) {
+                try {
+                    val resolvedValue = secretsResolver.resolveReferences(value)
 
-                            if (extension.verbose.get()) {
-                                logger.lifecycle(
-                                    "Injected secret into environment variable: $name"
-                                )
-                            }
-                        } catch (e: Exception) {
-                            logger.error(
-                                "Failed to resolve secret for environment variable $name: ${e.message}"
-                            )
-                            throw e
-                        }
+                    envsToInject[name] = resolvedValue
+                    injectedVars.add(name)
+
+                    if (extension.verbose.get()) {
+                        logger.lifecycle("Injected secret into environment variable: $name")
                     }
+                } catch (e: Exception) {
+                    logger.error("Failed to resolve secret for environment variable $name: ${e.message}")
+                    throw e
                 }
             }
-
-            // Apply changes
-            envProperty.putAll(envsToInject)
-            injectedProperties[task.path] = injectedVars
-
-            if (envsToInject.isNotEmpty()) {
-                logger.debug(
-                    "Injected ${envsToInject.size} secrets into task environment"
-                )
-            }
-        } else {
-            logger.debug("Task ${task.name} does not support environment property injection")
         }
+
+        // Apply changes
+        environment.putAll(envsToInject)
+        injectedVariables[task.path] = injectedVars
+
+        if (envsToInject.isNotEmpty()) {
+            logger.debug(
+                "Injected ${envsToInject.size} secrets into task environment"
+            )
+        }
+
+        task.environment = environment
     }
 
     /**
@@ -171,18 +164,16 @@ class SecretsInjector(
      * Clears injected secrets from the task
      */
     fun clearInjectedSecrets(task: Task) {
-        val injectedVars = injectedProperties.remove(task.path) ?: return
-
-        val envProperty = try {
-            task.javaClass.getMethod("getEnvironment").invoke(task) as? MutableMap<String, Any>
-        } catch (e: Exception) {
-            null
+        if (task !is ProcessForkOptions) {
+            logger.debug("Task ${task.name} does not support environment property injection")
+            return
         }
 
-        envProperty?.let { env ->
-            injectedVars.forEach { varName ->
-                env.remove(varName)
-            }
+        val injectedVars = injectedVariables.remove(task.path) ?: return
+        val environment = task.environment.orEmpty().toMutableMap()
+
+        injectedVars.forEach { varName ->
+            environment.remove(varName)
         }
 
         logger.debug("Cleared ${injectedVars.size} injected secrets from task ${task.name}")
