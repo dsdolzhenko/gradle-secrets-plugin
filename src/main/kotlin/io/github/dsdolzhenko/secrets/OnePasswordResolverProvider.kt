@@ -11,11 +11,16 @@ class OnePasswordResolverProvider : SecretsResolverProvider {
     override fun getName(): String = "1Password"
 
     override fun createResolver(project: Project, extension: SecretsExtension): SecretsResolver {
-        return SecretsOnePasswordResolver(
+        val commandExecutor = ProcessOnePasswordCommandExecutor(
             project.logger,
-            extension.cliPath.get(),
-            extension.account.orNull,
-            extension.cliTimeout.get()
+            extension.cliPath.get()
+        )
+
+        return SecretsOnePasswordResolver(
+            logger = project.logger,
+            commandExecutor = commandExecutor,
+            account = extension.account.orNull,
+            timeout = extension.cliTimeout.get()
         )
     }
 }

@@ -64,11 +64,12 @@ class SecretsPlugin : Plugin<Project> {
         if (providers.isEmpty()) {
             logger.warn("No SecretsResolverProvider implementations found via ServiceLoader")
             logger.warn("Falling back to default 1Password resolver")
+            val commandExecutor = ProcessOnePasswordCommandExecutor(logger, extension.cliPath.get())
             return SecretsOnePasswordResolver(
-                logger,
-                extension.cliPath.get(),
-                extension.account.orNull,
-                extension.cliTimeout.get()
+                logger = logger,
+                commandExecutor = commandExecutor,
+                account = extension.account.orNull,
+                timeout = extension.cliTimeout.get()
             )
         }
 
@@ -92,11 +93,12 @@ class SecretsPlugin : Plugin<Project> {
         if (resolvers.isEmpty()) {
             logger.warn("No resolvers could be created from providers")
             logger.warn("Falling back to default 1Password resolver")
+            val commandExecutor = ProcessOnePasswordCommandExecutor(logger, extension.cliPath.get())
             return SecretsOnePasswordResolver(
-                logger,
-                extension.cliPath.get(),
-                extension.account.orNull,
-                extension.cliTimeout.get()
+                logger = logger,
+                commandExecutor = commandExecutor,
+                account = extension.account.orNull,
+                timeout = extension.cliTimeout.get()
             )
         }
 

@@ -20,17 +20,19 @@ class MockSecretsResolver(
     /**
      * Resolves mock references in the format: mock://secret-name
      */
-    override fun resolveReferences(text: String): String {
-        var result = text
-        secretsMap.forEach { (reference, value) ->
-            val fullReference = "$referencePrefix$reference"
-            if (result.contains(fullReference)) {
-                result = result.replace(fullReference, value)
-                resolvedSecrets.add(reference)
-                logger.debug("Resolved mock reference: $reference")
+    override fun resolveReferences(properties: Map<String, String>): Map<String, String> {
+        return properties.mapValues { (_, value) ->
+            var result = value
+            secretsMap.forEach { (reference, secretValue) ->
+                val fullReference = "$referencePrefix$reference"
+                if (result.contains(fullReference)) {
+                    result = result.replace(fullReference, secretValue)
+                    resolvedSecrets.add(reference)
+                    logger.debug("Resolved mock reference: $reference")
+                }
             }
+            result
         }
-        return result
     }
 
     /**
