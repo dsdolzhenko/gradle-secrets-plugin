@@ -24,51 +24,51 @@ class SecretsInjector(
      */
     fun injectSystemProperties() {
         val systemProperties = System.getProperties()
-        val propertiesToInject = mutableMapOf<String, String>()
+
+        // Collect all properties with secrets
+        val propertiesToResolve = mutableMapOf<String, String>()
 
         systemProperties.stringPropertyNames().forEach { propertyName ->
             if (shouldProcessProperty(propertyName, extension)) {
                 val value = systemProperties.getProperty(propertyName)
                 if (secretsResolver.containsReference(value)) {
-                    try {
-                        // Store original value
-                        originalValues.putIfAbsent(propertyName, value)
-
-                        // Resolve and inject
-                        val resolvedValue = secretsResolver.resolveReferences(value)
-
-                        propertiesToInject[propertyName] = resolvedValue
-
-                        if (extension.verbose.get()) {
-                            logger.lifecycle(
-                                "Injected secret into system property: $propertyName"
-                            )
-                        }
-                    } catch (e: Exception) {
-                        logger.error(
-                            "Failed to resolve secret for system property $propertyName: ${e.message}"
-                        )
-                        throw e
-                    }
+                    // Store original value
+                    originalValues.putIfAbsent(propertyName, value)
+                    propertiesToResolve[propertyName] = value
                 }
             }
         }
 
-        // Apply all changes at once
-        propertiesToInject.forEach { (name, value) ->
-            System.setProperty(name, value)
+        if (propertiesToResolve.isEmpty()) {
+            return
         }
 
-        if (propertiesToInject.isNotEmpty()) {
+        try {
+            // Use batch resolution
+            logger.debug("Resolving ${propertiesToResolve.size} system properties")
+            val resolvedProperties = secretsResolver.resolveReferences(propertiesToResolve)
+
+            // Apply all changes at once
+            resolvedProperties.forEach { (name, value) ->
+                System.setProperty(name, value)
+
+                if (extension.verbose.get()) {
+                    logger.lifecycle("Injected secret into system property: $name")
+                }
+            }
+
             logger.debug(
-                "Injected ${propertiesToInject.size} 1Password secrets into system properties"
+                "Injected ${resolvedProperties.size} secrets into system properties"
             )
+        } catch (e: Exception) {
+            logger.error("Failed to resolve secrets for system properties: ${e.message}")
+            throw e
         }
     }
 
     /**
      * Injects secrets into environment variables for a task
-     * Note: We can't modify actual env vars, but we can modify the task environment
+     * Note: We can't modify actual environment variables, but we can modify the task environment
      */
     fun injectEnvironmentVariables(task: Task) {
         if (task !is ProcessForkOptions) {
@@ -78,85 +78,89 @@ class SecretsInjector(
 
         val environment = task.environment.orEmpty().toMutableMap()
 
-        val injectedVars = mutableSetOf<String>()
-        val envsToInject = mutableMapOf<String, String>()
+        // Collect all environment variables with secrets
+        val variablesToResolve = mutableMapOf<String, String>()
 
         environment.forEach { (name, value) ->
             if (value is String && shouldProcessProperty(name, extension) && secretsResolver.containsReference(value)) {
-                try {
-                    val resolvedValue = secretsResolver.resolveReferences(value)
-
-                    envsToInject[name] = resolvedValue
-                    injectedVars.add(name)
-
-                    if (extension.verbose.get()) {
-                        logger.lifecycle("Injected secret into environment variable: $name")
-                    }
-                } catch (e: Exception) {
-                    logger.error("Failed to resolve secret for environment variable $name: ${e.message}")
-                    throw e
-                }
+                variablesToResolve[name] = value
             }
         }
 
-        // Apply changes
-        environment.putAll(envsToInject)
-        injectedVariables[task.path] = injectedVars
-
-        if (envsToInject.isNotEmpty()) {
-            logger.debug(
-                "Injected ${envsToInject.size} secrets into task environment"
-            )
+        if (variablesToResolve.isEmpty()) {
+            return
         }
 
-        task.environment = environment
+        try {
+            // Use batch resolution
+            logger.debug("Resolving ${variablesToResolve.size} environment variables")
+            val resolvedVariables = secretsResolver.resolveReferences(variablesToResolve)
+
+            // Apply changes
+            environment.putAll(resolvedVariables)
+            injectedVariables[task.path] = resolvedVariables.keys.toMutableSet()
+
+            if (extension.verbose.get()) {
+                resolvedVariables.keys.forEach { name ->
+                    logger.lifecycle("Injected secret into environment variable: $name")
+                }
+            }
+
+            logger.debug(
+                "Injected ${resolvedVariables.size} secrets into task environment"
+            )
+
+            task.environment = environment
+        } catch (e: Exception) {
+            logger.error("Failed to resolve secrets for environment variables: ${e.message}")
+            throw e
+        }
     }
 
     /**
      * Injects secrets into project properties
      */
     fun injectProjectProperties() {
-        val propertiesToInject = mutableMapOf<String, Any>()
+        // Collect all project properties with secrets
+        val propertiesToResolve = mutableMapOf<String, String>()
 
         project.properties.forEach { (propertyName, value) ->
             if (value is String && shouldProcessProperty(propertyName, extension)) {
                 if (secretsResolver.containsReference(value)) {
-                    try {
-                        // Store original value
-                        originalValues.putIfAbsent(propertyName, value)
-
-                        // Resolve and inject
-                        val resolvedValue = secretsResolver.resolveReferences(value)
-
-                        propertiesToInject[propertyName] = resolvedValue
-
-                        if (extension.verbose.get()) {
-                            logger.lifecycle(
-                                "Injected secret into project property: $propertyName"
-                            )
-                        }
-                    } catch (e: Exception) {
-                        logger.error(
-                            "Failed to resolve secret for project property $propertyName: ${e.message}"
-                        )
-                        throw e
-                    }
+                    // Store original value
+                    originalValues.putIfAbsent(propertyName, value)
+                    propertiesToResolve[propertyName] = value
                 }
             }
         }
 
-        // Note: Project properties are typically read-only after initialization
-        // This will work for extra properties set via ext
-        propertiesToInject.forEach { (name, value) ->
-            if (project.hasProperty(name)) {
-                project.extensions.extraProperties.set(name, value)
-            }
+        if (propertiesToResolve.isEmpty()) {
+            return
         }
 
-        if (propertiesToInject.isNotEmpty()) {
+        try {
+            // Use batch resolution
+            logger.debug("Resolving ${propertiesToResolve.size} project properties")
+            val resolvedProperties = secretsResolver.resolveReferences(propertiesToResolve)
+
+            // Note: Project properties are typically read-only after initialization
+            // This will work for extra properties set via ext
+            resolvedProperties.forEach { (name, value) ->
+                if (project.hasProperty(name)) {
+                    project.extensions.extraProperties.set(name, value)
+                }
+
+                if (extension.verbose.get()) {
+                    logger.lifecycle("Injected secret into project property: $name")
+                }
+            }
+
             logger.debug(
-                "Injected ${propertiesToInject.size} secrets into project properties"
+                "Injected ${resolvedProperties.size} secrets into project properties"
             )
+        } catch (e: Exception) {
+            logger.error("Failed to resolve secrets for project properties: ${e.message}")
+            throw e
         }
     }
 
@@ -169,14 +173,14 @@ class SecretsInjector(
             return
         }
 
-        val injectedVars = injectedVariables.remove(task.path) ?: return
+        val injectedVariables = this@SecretsInjector.injectedVariables.remove(task.path) ?: return
         val environment = task.environment.orEmpty().toMutableMap()
 
-        injectedVars.forEach { varName ->
+        injectedVariables.forEach { varName ->
             environment.remove(varName)
         }
 
-        logger.debug("Cleared ${injectedVars.size} injected secrets from task ${task.name}")
+        logger.debug("Cleared ${injectedVariables.size} injected secrets from task ${task.name}")
     }
 
     /**
@@ -191,20 +195,5 @@ class SecretsInjector(
         // If the include list is specified, property must be in it
         val includeList = extension.includedProperties.get()
         return !(includeList.isNotEmpty() && !includeList.contains(propertyName))
-    }
-
-    /**
-     * Restores original property values
-     */
-    fun restoreOriginalValues() {
-        originalValues.forEach { (name, value) ->
-            try {
-                System.setProperty(name, value)
-                logger.debug("Restored original value for property: $name")
-            } catch (e: Exception) {
-                logger.warn("Failed to restore original value for property $name: ${e.message}")
-            }
-        }
-        originalValues.clear()
     }
 }

@@ -128,11 +128,11 @@ class SecretsPluginTest {
         val resolver = MockSecretsResolver(project.logger, mockSecrets)
 
         // When
-        val input = "API_KEY=mock://api-key and DB_PASSWORD=mock://db-password"
-        val result = resolver.resolveReferences(input)
+        val properties = mapOf("config" to "API_KEY=mock://api-key and DB_PASSWORD=mock://db-password")
+        val result = resolver.resolveReferences(properties)
 
         // Then
-        assertEquals("API_KEY=secret-value-123 and DB_PASSWORD=super-secret-pwd", result)
+        assertEquals("API_KEY=secret-value-123 and DB_PASSWORD=super-secret-pwd", result["config"])
         assertEquals(2, resolver.getResolvedSecrets().size)
         assertTrue(resolver.getResolvedSecrets().contains("api-key"))
         assertTrue(resolver.getResolvedSecrets().contains("db-password"))
@@ -158,7 +158,7 @@ class SecretsPluginTest {
         val resolver = MockSecretsResolver(project.logger, mockSecrets)
 
         // Resolve some secrets first
-        resolver.resolveReferences("mock://key")
+        resolver.resolveReferences(mapOf("prop" to "mock://key"))
 
         // When
         resolver.clearCache()
@@ -185,11 +185,11 @@ class SecretsPluginTest {
         val composite = CompositeSecretsResolver(project.logger, listOf(resolver1, resolver2))
 
         // When
-        val input = "First: mock1://key1, Second: mock2://key2"
-        val result = composite.resolveReferences(input)
+        val properties = mapOf("config" to "First: mock1://key1, Second: mock2://key2")
+        val result = composite.resolveReferences(properties)
 
         // Then
-        assertEquals("First: value1, Second: value2", result)
+        assertEquals("First: value1, Second: value2", result["config"])
         assertEquals(1, resolver1.getResolvedSecrets().size)
         assertEquals(1, resolver2.getResolvedSecrets().size)
     }
@@ -217,7 +217,7 @@ class SecretsPluginTest {
         val composite = CompositeSecretsResolver(project.logger, listOf(resolver1, resolver2))
 
         // Resolve some secrets
-        composite.resolveReferences("mock1://k1 mock2://k2")
+        composite.resolveReferences(mapOf("prop" to "mock1://k1 mock2://k2"))
 
         // When
         composite.clearCache()
@@ -232,7 +232,11 @@ class SecretsPluginTest {
         // Given
         val project = ProjectBuilder.builder().build()
         val mockResolver = MockSecretsResolver(project.logger)
-        val opResolver = SecretsOnePasswordResolver(project.logger)
+        val mockExecutor = MockOnePasswordCommandExecutor()
+        val opResolver = SecretsOnePasswordResolver(
+            logger = project.logger,
+            commandExecutor = mockExecutor
+        )
 
         // When & Then
         assertEquals("Mock", mockResolver.getName())

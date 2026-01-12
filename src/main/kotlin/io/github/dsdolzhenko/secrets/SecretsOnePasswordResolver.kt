@@ -1,10 +1,11 @@
 package io.github.dsdolzhenko.secrets
 
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.jsonPrimitive
 import org.gradle.api.logging.Logger
-import java.io.BufferedReader
-import java.io.InputStreamReader
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.TimeUnit
 import java.util.regex.Pattern
 
 /**
@@ -12,7 +13,7 @@ import java.util.regex.Pattern
  */
 class SecretsOnePasswordResolver(
     private val logger: Logger,
-    private val cliPath: String = "op",
+    private val commandExecutor: OnePasswordCommandExecutor,
     private val account: String? = null,
     private val timeout: Int = 30
 ) : SecretsResolver {
@@ -20,28 +21,88 @@ class SecretsOnePasswordResolver(
     override fun getName(): String = "1Password"
 
     private val secretCache = ConcurrentHashMap<String, String>()
-    private val referencePattern = Pattern.compile("op://([^/]+)/([^/]+)/([^\\s\"']+)")
+
+    // Pattern matches: op://vault/item/field where the field contains alphanumeric, underscore, dot, hyphen, or slash
+    // Stops at whitespace, quotes, or other special characters like semicolon
+    private val referencePattern = Pattern.compile("op://([^/]+)/([^/]+)/([a-zA-Z0-9_./\\-]+)")
 
     /**
-     * Resolves all references in a given text
+     * Resolves all references in a batch of properties.
+     * This minimizes CLI invocations by resolving all secrets in one op inject call.
+     *
+     * @param properties Map of property names to their values (which may contain secret references)
+     * @return Map with all secret references resolved
      */
-    override fun resolveReferences(text: String): String {
-        val matcher = referencePattern.matcher(text)
-        val result = StringBuffer()
+    override fun resolveReferences(properties: Map<String, String>): Map<String, String> {
+        if (properties.isEmpty()) {
+            return emptyMap()
+        }
 
-        while (matcher.find()) {
-            val reference = matcher.group(0)
-            try {
-                val secret = resolveSecret(reference)
-                matcher.appendReplacement(result, secret)
-            } catch (e: Exception) {
-                logger.warn("Failed to resolve reference $reference: ${e.message}")
-                throw e
+        val result = mutableMapOf<String, String>()
+
+        // Separate properties with and without references
+        val propertiesWithReferences = mutableMapOf<String, String>()
+
+        properties.forEach { (key, value) ->
+            if (containsReference(value)) {
+                propertiesWithReferences[key] = value
+            } else {
+                result[key] = value
             }
         }
-        matcher.appendTail(result)
 
-        return result.toString()
+        if (propertiesWithReferences.isEmpty()) {
+            return properties
+        }
+
+        // Check which properties can be resolved from the cache
+        val propertiesToResolve = mutableMapOf<String, String>()
+        val cachedProperties = mutableMapOf<String, String>()
+
+        propertiesWithReferences.forEach { (key, value) ->
+            val references = collectReferences(value)
+            if (references.all { secretCache.containsKey(it) }) {
+                cachedProperties[key] = value
+            } else {
+                propertiesToResolve[key] = value
+            }
+        }
+
+        // Resolve properties using cache
+        cachedProperties.forEach { (key, value) ->
+            result[key] = replaceReferencesInText(value, collectReferences(value))
+        }
+
+        // Resolve remaining properties via CLI
+        if (propertiesToResolve.isNotEmpty()) {
+            logger.debug("Resolving ${propertiesToResolve.size} properties with uncached secrets in batch")
+
+            // Create a simple properties template for op inject
+            val template = createTemplate(propertiesToResolve)
+
+            // Execute op inject
+            val resolvedOutput = commandExecutor.inject(template, account, timeout)
+
+            // Parse results
+            val resolvedMap = parsePropertiesOutput(resolvedOutput)
+
+            // Add resolved properties to result and update cache where possible
+            propertiesToResolve.forEach { (key, value) ->
+                val resolvedValue = resolvedMap[key]
+                    ?: throw SecretsException("Failed to resolve property: $key")
+
+                result[key] = resolvedValue
+
+                // Only cache when the property value is exactly one reference
+                val references = collectReferences(value)
+                if (references.size == 1 && value == references[0]) {
+                    secretCache[references[0]] = resolvedValue
+                    logger.debug("Cached secret for: ${references[0]}")
+                }
+            }
+        }
+
+        return result
     }
 
     /**
@@ -49,13 +110,6 @@ class SecretsOnePasswordResolver(
      */
     override fun containsReference(text: String): Boolean {
         return referencePattern.matcher(text).find()
-    }
-
-    /**
-     * Validates 1Password reference format
-     */
-    fun isValidReference(reference: String): Boolean {
-        return referencePattern.matcher(reference).matches()
     }
 
     /**
@@ -67,76 +121,54 @@ class SecretsOnePasswordResolver(
     }
 
     /**
-     * Resolves a secret reference to its actual value
-     * Format: op://vault/item/field
+     * Collects all unique secret references from a text
      */
-    private fun resolveSecret(reference: String): String {
-        // Check cache first
-        secretCache[reference]?.let { return it }
+    private fun collectReferences(text: String): List<String> {
+        val references = mutableListOf<String>()
+        val matcher = referencePattern.matcher(text)
 
-        logger.debug("Resolving 1Password reference: $reference")
-
-        // Validate reference format
-        if (!isValidReference(reference)) {
-            throw SecretsException("Invalid 1Password reference format: $reference")
+        while (matcher.find()) {
+            references.add(matcher.group(0))
         }
 
+        return references.distinct()
+    }
+
+    /**
+     * Creates a template for op inject
+     * Uses original property keys to be able to map the properties back
+     */
+    private fun createTemplate(properties: Map<String, String>): String {
+        return Json.encodeToString(
+            JsonObject.serializer(),
+            JsonObject(properties.mapValues { JsonPrimitive(it.value) })
+        )
+    }
+
+    /**
+     * Parses the output from `op inject`
+     */
+    private fun parsePropertiesOutput(output: String): Map<String, String> {
         try {
-            val command = buildCommand(reference, cliPath, account)
-            val secret = executeCommand(command, timeout)
-
-            // Cache the result
-            secretCache[reference] = secret
-            logger.debug("Successfully resolved secret for: $reference")
-
-            return secret
+            val jsonObject = Json.parseToJsonElement(output) as JsonObject
+            return jsonObject.mapValues { it.value.jsonPrimitive.content }
         } catch (e: Exception) {
-            throw SecretsException("Failed to resolve 1Password reference: $reference", e)
+            throw SecretsException("Failed to parse JSON result from op inject: ${e.message}", e)
         }
     }
 
-    private fun buildCommand(
-        reference: String,
-        cliPath: String,
-        account: String?
-    ): List<String> {
-        val command = mutableListOf(cliPath, "read", reference)
+    /**
+     * Replaces references in text with their resolved values from the cache
+     */
+    private fun replaceReferencesInText(text: String, references: List<String>): String {
+        var result = text
 
-        if (account != null) {
-            command.add("--account")
-            command.add(account)
+        references.forEach { reference ->
+            val value = secretCache[reference]
+                ?: throw SecretsException("Secret not found in cache: $reference")
+            result = result.replace(reference, value)
         }
 
-        return command
-    }
-
-    private fun executeCommand(command: List<String>, timeout: Int): String {
-        logger.debug("Executing command: ${command.joinToString(" ")}")
-
-        val process = ProcessBuilder(command)
-            .redirectErrorStream(false)
-            .start()
-
-        val completed = process.waitFor(timeout.toLong(), TimeUnit.SECONDS)
-
-        if (!completed) {
-            process.destroyForcibly()
-            throw SecretsException("1Password CLI command timed out after $timeout seconds")
-        }
-
-        val exitCode = process.exitValue()
-
-        if (exitCode != 0) {
-            val errorOutput = BufferedReader(InputStreamReader(process.errorStream))
-                .readText()
-                .trim()
-            throw SecretsException(
-                "1Password CLI command failed with exit code $exitCode: $errorOutput"
-            )
-        }
-
-        return BufferedReader(InputStreamReader(process.inputStream))
-            .readText()
-            .trim()
+        return result
     }
 }
