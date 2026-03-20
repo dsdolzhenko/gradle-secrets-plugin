@@ -17,7 +17,7 @@ plugins {
     kotlin("plugin.serialization") version "2.3.0"
     id("com.palantir.git-version") version "4.2.0"
     id("java-gradle-plugin")
-    id("maven-publish")
+    id("com.gradle.plugin-publish") version "1.3.0"
 }
 
 group = "io.github.dsdolzhenko"
@@ -37,12 +37,16 @@ kotlin {
 }
 
 gradlePlugin {
+    website = "https://github.com/dsdolzhenko/gradle-secrets-plugin"
+    vcsUrl = "https://github.com/dsdolzhenko/gradle-secrets-plugin"
+
     plugins {
         register("secrets") {
             id = "io.github.dsdolzhenko.secrets"
             implementationClass = "io.github.dsdolzhenko.secrets.SecretsPlugin"
+            displayName = "Gradle Secrets Plugin"
             description = "Gradle plugin that replaces secret references with actual values from a secret store before task execution"
-            tags.addAll("1password", "secrets")
+            tags.addAll("secrets", "environment", "security")
         }
     }
 }
