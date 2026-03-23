@@ -5,7 +5,7 @@ A Gradle plugin that automatically injects secrets from a secret store (only 1Pa
 ## Features
 
 - **Automatic Secret Injection**: Replaces secret references with actual values
-- **Performance**: Caches secrets during the build to minimize calls to secrets store 
+- **Performance**: Caches secrets during the build to minimize calls to secrets store
 - **Flexible Configuration**: Control what gets injected (system properties, environment variables, project properties)
 - **Task-Level Control**: Include or exclude specific tasks
 - **Secure**: Secrets are only resolved when needed and can be cleared after task execution
@@ -19,30 +19,7 @@ A Gradle plugin that automatically injects secrets from a secret store (only 1Pa
 
 ## Installation
 
-You will need a GitHub personal access token with `read:packages` scope to access the plugin's Maven repository.
-See [Authenticating to GitHub Packages](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-gradle-registry#authenticating-to-github-packages) for details.
-
-Assuming that you have `githubUsername` and `githubToken` variables set in your `gradle.properties`, add the following to your `settings.gradle.kts`:
-
-```kotlin
-pluginManagement {
-    val githubUsername: String? by settings
-    val githubToken: String? by settings
-
-    repositories {
-        maven {
-            url = uri("https://maven.pkg.github.com/dsdolzhenko/gradle-secrets-plugin")
-            credentials {
-                username = githubUsername ?: System.getenv("GITHUB_USERNAME")
-                password = githubToken ?: System.getenv("GITHUB_TOKEN")
-            }
-        }
-        gradlePluginPortal()
-    }
-}
-```
-
-Then apply the plugin in your `build.gradle.kts`:
+Apply the plugin in your `build.gradle.kts`:
 
 ```kotlin
 plugins {
@@ -84,32 +61,32 @@ Configure the plugin in your `build.gradle.kts`:
 onePassword {
     // Enable/disable the plugin (default: true)
     enabled.set(true)
-    
+
     // Control what gets injected
     injectSystemProperties.set(true)
     injectEnvironmentVariables.set(true)
     injectProjectProperties.set(true)
-    
+
     // Fail build on secret resolution errors (default: true)
     failOnError.set(true)
-    
+
     // Clear secrets after each task (default: false)
     clearSecretsAfterTask.set(false)
-    
+
     // 1Password CLI configuration
     cliPath.set("op") // Path to 1Password CLI
     account.set("my-account") // Optional: specific account
     cliTimeout.set(30) // Timeout in seconds
-    
+
     // Exclude specific tasks
     excludeTasks("help", "tasks", "projects")
-    
+
     // Only inject specific properties
     includeProperties("github.token", "api.key")
-    
+
     // Or exclude specific properties
     excludeProperties("some.property")
-    
+
     // Enable verbose logging
     verbose.set(false)
 }
