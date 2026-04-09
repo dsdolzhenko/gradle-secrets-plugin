@@ -48,7 +48,6 @@ class SecretsPluginTest {
         val extension = project.extensions.getByType(SecretsExtension::class.java)
 
         // Then
-        assertTrue(extension.enabled.get())
         assertTrue(extension.injectSystemProperties.get())
         assertTrue(extension.injectEnvironmentVariables.get())
         assertTrue(extension.injectProjectProperties.get())
@@ -65,14 +64,12 @@ class SecretsPluginTest {
 
         // When
         val extension = project.extensions.getByType(SecretsExtension::class.java)
-        extension.enabled.set(false)
         extension.cliPath.set("/custom/path/to/op")
         extension.account.set("my-account")
         extension.cliTimeout.set(60)
         extension.verbose.set(true)
 
         // Then
-        assertEquals(false, extension.enabled.get())
         assertEquals("/custom/path/to/op", extension.cliPath.get())
         assertEquals("my-account", extension.account.get())
         assertEquals(60, extension.cliTimeout.get())

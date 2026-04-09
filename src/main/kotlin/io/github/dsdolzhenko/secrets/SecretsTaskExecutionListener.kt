@@ -15,10 +15,6 @@ class SecretsTaskExecutionListener(
 ) : TaskExecutionListener {
 
     override fun beforeExecute(task: Task) {
-        if (!extension.enabled.get()) {
-            return
-        }
-
         // Skip if the task is in the exclusion list
         if (extension.excludedTasks.get().contains(task.name)) {
             logger.debug("Skipping secrets injection for excluded task: ${task.name}")

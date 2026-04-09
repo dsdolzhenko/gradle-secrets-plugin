@@ -10,12 +10,6 @@ import javax.inject.Inject
  */
 abstract class SecretsExtension @Inject constructor(objects: ObjectFactory) {
     /**
-     * Enable or disable the plugin. Default: true
-     */
-    val enabled: Property<Boolean> = objects.property(Boolean::class.java)
-        .convention(true)
-
-    /**
      * Inject secrets into system properties. Default: true
      */
     val injectSystemProperties: Property<Boolean> = objects.property(Boolean::class.java)
@@ -62,13 +56,6 @@ abstract class SecretsExtension @Inject constructor(objects: ObjectFactory) {
      * If not set, uses the currently signed-in account
      */
     val account: Property<String> = objects.property(String::class.java)
-
-    /**
-     * Pattern for detecting 1Password references
-     * Default: op://[vault]/[item]/[field]
-     */
-    val referencePattern: Property<String> = objects.property(String::class.java)
-        .convention("op://[^\\s]+")
 
     /**
      * Timeout for 1Password CLI calls in seconds. Default: 30

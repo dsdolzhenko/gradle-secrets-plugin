@@ -59,9 +59,6 @@ Configure the plugin in your `build.gradle.kts`:
 
 ```kotlin
 secrets {
-    // Enable/disable the plugin (default: true)
-    enabled.set(true)
-
     // Control what gets injected
     injectSystemProperties.set(true)
     injectEnvironmentVariables.set(true)
