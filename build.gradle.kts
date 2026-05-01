@@ -13,8 +13,8 @@ val githubToken: String by extra {
 }
 
 plugins {
-    kotlin("jvm") version "2.3.20"
-    kotlin("plugin.serialization") version "2.3.20"
+    kotlin("jvm") version "2.3.21"
+    kotlin("plugin.serialization") version "2.3.21"
     id("com.palantir.git-version") version "5.0.0"
     id("java-gradle-plugin")
     id("com.gradle.plugin-publish") version "2.1.1"
@@ -28,7 +28,7 @@ repositories {
 }
 
 dependencies {
-    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.10.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.11.0")
     testImplementation(kotlin("test"))
 }
 
