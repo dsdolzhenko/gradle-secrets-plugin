@@ -2,6 +2,7 @@ package io.github.dsdolzhenko.secrets
 
 import org.gradle.api.Plugin
 import org.gradle.api.Project
+import org.gradle.api.logging.Logging
 import java.util.ServiceLoader
 
 /**
@@ -22,19 +23,66 @@ class SecretsPlugin : Plugin<Project> {
             // Discover all resolver providers via ServiceLoader
             val secretsResolver = discoverAndCreateResolvers(project, extension)
 
-            // Register task execution listener
-            project.gradle.taskGraph.addTaskExecutionListener(
-                SecretsTaskExecutionListener(
-                    project.logger,
-                    extension,
-                    SecretsInjector(
-                        project,
-                        project.logger,
-                        extension,
-                        secretsResolver
-                    )
-                )
+            // Capture plain config values now: task actions registered below run under the
+            // configuration cache, which forbids reaching back into Project/Extension/Property.
+            val excludedTasks = extension.excludedTasks.get()
+            val injectSystemProperties = extension.injectSystemProperties.get()
+            val injectEnvironmentVariables = extension.injectEnvironmentVariables.get()
+            val injectProjectProperties = extension.injectProjectProperties.get()
+            val failOnError = extension.failOnError.get()
+            val clearSecretsAfterTask = extension.clearSecretsAfterTask.get()
+
+            val secretsInjector = SecretsInjector(
+                logger = Logging.getLogger(SecretsInjector::class.java),
+                secretsResolver = secretsResolver,
+                includedProperties = extension.includedProperties.get(),
+                excludedProperties = extension.excludedProperties.get(),
+                verbose = extension.verbose.get()
             )
+
+            // Project properties can only be mutated at configuration time, so this runs
+            // once here rather than from a (configuration-cache-incompatible) per-task action.
+            if (injectProjectProperties) {
+                try {
+                    secretsInjector.injectProjectProperties(project)
+                } catch (e: Exception) {
+                    if (failOnError) {
+                        throw SecretsException("Failed to inject secrets into project properties", e)
+                    } else {
+                        project.logger.warn("Failed to inject secrets into project properties: ${e.message}")
+                    }
+                }
+            }
+
+            project.tasks.configureEach { task ->
+                if (task.name in excludedTasks) {
+                    return@configureEach
+                }
+
+                task.doFirst {
+                    try {
+                        if (injectSystemProperties) {
+                            secretsInjector.injectSystemProperties()
+                        }
+
+                        if (injectEnvironmentVariables) {
+                            secretsInjector.injectEnvironmentVariables(it)
+                        }
+                    } catch (e: Exception) {
+                        if (failOnError) {
+                            throw SecretsException("Failed to inject secrets", e)
+                        } else {
+                            it.logger.warn("Failed to inject secrets: ${e.message}")
+                        }
+                    }
+                }
+
+                task.doLast {
+                    if (clearSecretsAfterTask) {
+                        secretsInjector.clearInjectedSecrets(it)
+                    }
+                }
+            }
 
             // Add a cleanup task to clear cached secrets
             project.tasks.register("clearSecretsCache") {
@@ -42,7 +90,7 @@ class SecretsPlugin : Plugin<Project> {
                 it.description = "Clears cached secrets from the resolver"
                 it.doLast {
                     secretsResolver.clearCache()
-                    project.logger.lifecycle("Secrets cache cleared")
+                    it.logger.lifecycle("Secrets cache cleared")
                 }
             }
         }
@@ -64,13 +112,7 @@ class SecretsPlugin : Plugin<Project> {
         if (providers.isEmpty()) {
             logger.warn("No SecretsResolverProvider implementations found via ServiceLoader")
             logger.warn("Falling back to default 1Password resolver")
-            val commandExecutor = ProcessOnePasswordCommandExecutor(logger, extension.cliPath.get())
-            return SecretsOnePasswordResolver(
-                logger = logger,
-                commandExecutor = commandExecutor,
-                account = extension.account.orNull,
-                timeout = extension.cliTimeout.get()
-            )
+            return defaultOnePasswordResolver(project, extension)
         }
 
         logger.info("Discovered ${providers.size} secret resolver provider(s):")
@@ -93,13 +135,7 @@ class SecretsPlugin : Plugin<Project> {
         if (resolvers.isEmpty()) {
             logger.warn("No resolvers could be created from providers")
             logger.warn("Falling back to default 1Password resolver")
-            val commandExecutor = ProcessOnePasswordCommandExecutor(logger, extension.cliPath.get())
-            return SecretsOnePasswordResolver(
-                logger = logger,
-                commandExecutor = commandExecutor,
-                account = extension.account.orNull,
-                timeout = extension.cliTimeout.get()
-            )
+            return defaultOnePasswordResolver(project, extension)
         }
 
         logger.info("Active secret resolvers:")
@@ -111,7 +147,18 @@ class SecretsPlugin : Plugin<Project> {
         return if (resolvers.size == 1) {
             resolvers.first()
         } else {
-            CompositeSecretsResolver(logger, resolvers)
+            CompositeSecretsResolver(Logging.getLogger(CompositeSecretsResolver::class.java), resolvers)
         }
+    }
+
+    private fun defaultOnePasswordResolver(project: Project, extension: SecretsExtension): SecretsResolver {
+        val logger = Logging.getLogger(SecretsOnePasswordResolver::class.java)
+        val commandExecutor = ProcessOnePasswordCommandExecutor(logger, extension.cliPath.get(), project.providers)
+        return SecretsOnePasswordResolver(
+            logger = logger,
+            commandExecutor = commandExecutor,
+            account = extension.account.orNull,
+            timeout = extension.cliTimeout.get()
+        )
     }
 }

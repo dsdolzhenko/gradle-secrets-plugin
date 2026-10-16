@@ -7,17 +7,33 @@ import org.gradle.process.ProcessForkOptions
 import java.util.concurrent.ConcurrentHashMap
 
 /**
- * Injects resolved secrets into properties and environment variables
+ * Injects resolved secrets into properties and environment variables.
+ *
+ * Holds no reference to a [Project]: system property and environment variable
+ * injection run from task actions (doFirst/doLast), which must not reach a
+ * live Project under the configuration cache. Project properties injection is
+ * a one-off, configuration-time operation instead (see [injectProjectProperties]).
  */
 class SecretsInjector(
-    private val project: Project,
     private val logger: Logger,
-    private val extension: SecretsExtension,
-    private val secretsResolver: SecretsResolver
+    private val secretsResolver: SecretsResolver,
+    private val includedProperties: Set<String>,
+    private val excludedProperties: Set<String>,
+    private val verbose: Boolean
 ) {
 
-    private val originalValues = ConcurrentHashMap<String, String>()
-    private val injectedVariables = ConcurrentHashMap<String, MutableSet<String>>()
+    // Transient and lazily (re)created: these hold resolved secret values (or track which
+    // properties were injected) and must never be persisted to the configuration cache. See
+    // SecretsOnePasswordResolver.secretCacheOrNull for why a lazy getter is needed here too.
+    @Transient
+    private var originalValuesOrNull: ConcurrentHashMap<String, String>? = null
+    private val originalValues: ConcurrentHashMap<String, String>
+        get() = originalValuesOrNull ?: ConcurrentHashMap<String, String>().also { originalValuesOrNull = it }
+
+    @Transient
+    private var injectedVariablesOrNull: ConcurrentHashMap<String, MutableSet<String>>? = null
+    private val injectedVariables: ConcurrentHashMap<String, MutableSet<String>>
+        get() = injectedVariablesOrNull ?: ConcurrentHashMap<String, MutableSet<String>>().also { injectedVariablesOrNull = it }
 
     /**
      * Injects secrets into system properties
@@ -29,7 +45,7 @@ class SecretsInjector(
         val propertiesToResolve = mutableMapOf<String, String>()
 
         systemProperties.stringPropertyNames().forEach { propertyName ->
-            if (shouldProcessProperty(propertyName, extension)) {
+            if (shouldProcessProperty(propertyName)) {
                 val value = systemProperties.getProperty(propertyName)
                 if (secretsResolver.containsReference(value)) {
                     // Store original value
@@ -52,7 +68,7 @@ class SecretsInjector(
             resolvedProperties.forEach { (name, value) ->
                 System.setProperty(name, value)
 
-                if (extension.verbose.get()) {
+                if (verbose) {
                     logger.lifecycle("Injected secret into system property: $name")
                 }
             }
@@ -82,7 +98,7 @@ class SecretsInjector(
         val variablesToResolve = mutableMapOf<String, String>()
 
         environment.forEach { (name, value) ->
-            if (value is String && shouldProcessProperty(name, extension) && secretsResolver.containsReference(value)) {
+            if (value is String && shouldProcessProperty(name) && secretsResolver.containsReference(value)) {
                 variablesToResolve[name] = value
             }
         }
@@ -100,7 +116,7 @@ class SecretsInjector(
             environment.putAll(resolvedVariables)
             injectedVariables[task.path] = resolvedVariables.keys.toMutableSet()
 
-            if (extension.verbose.get()) {
+            if (verbose) {
                 resolvedVariables.keys.forEach { name ->
                     logger.lifecycle("Injected secret into environment variable: $name")
                 }
@@ -118,14 +134,18 @@ class SecretsInjector(
     }
 
     /**
-     * Injects secrets into project properties
+     * Injects secrets into project properties.
+     *
+     * Project properties can only be mutated at configuration time, so unlike
+     * the other injection methods this is called once from the plugin's
+     * `afterEvaluate` block rather than from a per-task action.
      */
-    fun injectProjectProperties() {
+    fun injectProjectProperties(project: Project) {
         // Collect all project properties with secrets
         val propertiesToResolve = mutableMapOf<String, String>()
 
         project.properties.forEach { (propertyName, value) ->
-            if (value is String && shouldProcessProperty(propertyName, extension)) {
+            if (value is String && shouldProcessProperty(propertyName)) {
                 if (secretsResolver.containsReference(value)) {
                     // Store original value
                     originalValues.putIfAbsent(propertyName, value)
@@ -150,7 +170,7 @@ class SecretsInjector(
                     project.extensions.extraProperties.set(name, value)
                 }
 
-                if (extension.verbose.get()) {
+                if (verbose) {
                     logger.lifecycle("Injected secret into project property: $name")
                 }
             }
@@ -186,14 +206,13 @@ class SecretsInjector(
     /**
      * Determines if a property should be processed based on include/exclude lists
      */
-    private fun shouldProcessProperty(propertyName: String, extension: SecretsExtension): Boolean {
+    private fun shouldProcessProperty(propertyName: String): Boolean {
         // Check explicit exclusions first
-        if (extension.excludedProperties.get().contains(propertyName)) {
+        if (excludedProperties.contains(propertyName)) {
             return false
         }
 
         // If the include list is specified, property must be in it
-        val includeList = extension.includedProperties.get()
-        return !(includeList.isNotEmpty() && !includeList.contains(propertyName))
+        return !(includedProperties.isNotEmpty() && !includedProperties.contains(propertyName))
     }
 }

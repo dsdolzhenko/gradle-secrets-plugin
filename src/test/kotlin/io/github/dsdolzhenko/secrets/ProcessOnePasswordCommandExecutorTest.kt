@@ -1,6 +1,7 @@
 package io.github.dsdolzhenko.secrets
 
 import org.gradle.api.logging.Logger
+import org.gradle.api.provider.ProviderFactory
 import org.gradle.testfixtures.ProjectBuilder
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
@@ -15,19 +16,21 @@ import org.junit.jupiter.api.assertThrows
 class ProcessOnePasswordCommandExecutorTest {
 
     private lateinit var logger: Logger
+    private lateinit var providers: ProviderFactory
     private lateinit var executor: ProcessOnePasswordCommandExecutor
 
     @BeforeEach
     fun setup() {
         val project = ProjectBuilder.builder().build()
         logger = project.logger
-        executor = ProcessOnePasswordCommandExecutor(logger, "op")
+        providers = project.providers
+        executor = ProcessOnePasswordCommandExecutor(logger, "op", providers)
     }
 
     @Test
     fun `inject should throw exception when op command fails`() {
         // Given - using an invalid command to force failure
-        val executorWithInvalidPath = ProcessOnePasswordCommandExecutor(logger, "/invalid/path/to/op")
+        val executorWithInvalidPath = ProcessOnePasswordCommandExecutor(logger, "/invalid/path/to/op", providers)
         val template = """{"test":"op://vault/item/field"}"""
 
         // When/Then
@@ -42,7 +45,7 @@ class ProcessOnePasswordCommandExecutorTest {
         // when the command fails (since we're not running actual op CLI)
 
         // Given
-        val executorWithInvalidPath = ProcessOnePasswordCommandExecutor(logger, "/invalid/path/to/op")
+        val executorWithInvalidPath = ProcessOnePasswordCommandExecutor(logger, "/invalid/path/to/op", providers)
         val template = """{"test":"op://vault/item/field"}"""
 
         // When/Then
@@ -58,7 +61,7 @@ class ProcessOnePasswordCommandExecutorTest {
     fun `inject should timeout when command takes too long`() {
         // Given - using a command that will timeout
         // We use 'sh -c sleep 10' to simulate a long-running command
-        val executorWithLongCommand = ProcessOnePasswordCommandExecutor(logger, "sh")
+        val executorWithLongCommand = ProcessOnePasswordCommandExecutor(logger, "sh", providers)
         val template = """{"test":"value"}"""
 
         // When/Then

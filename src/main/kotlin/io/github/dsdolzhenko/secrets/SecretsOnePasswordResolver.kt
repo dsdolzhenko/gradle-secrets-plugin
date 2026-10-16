@@ -20,7 +20,15 @@ class SecretsOnePasswordResolver(
 
     override fun getName(): String = "1Password"
 
-    private val secretCache = ConcurrentHashMap<String, String>()
+    // Transient and lazily (re)created: resolved secrets must never be persisted to the
+    // configuration cache. The configuration cache isolates task actions (and anything they
+    // capture, like this resolver) right after configuration even on a cache-miss build, so a
+    // @Transient field is already null by the time a task runs it; the lazy getter below
+    // self-heals that on first access instead of relying on the constructor initializer running.
+    @Transient
+    private var secretCacheOrNull: ConcurrentHashMap<String, String>? = null
+    private val secretCache: ConcurrentHashMap<String, String>
+        get() = secretCacheOrNull ?: ConcurrentHashMap<String, String>().also { secretCacheOrNull = it }
 
     // Pattern matches: op://vault/item/field where the field contains alphanumeric, underscore, dot, hyphen, or slash
     // Stops at whitespace, quotes, or other special characters like semicolon
