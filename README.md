@@ -89,6 +89,57 @@ secrets {
 }
 ```
 
+## Configuration-Time Secrets (via the dotenv settings plugin)
+
+The plugin above only resolves references in system/environment/project properties before
+task execution — it can't help with a value read *while* `settings.gradle.kts` or a
+`build.gradle.kts` is configuring itself, such as a `.env` entry used for repository
+credentials via the companion
+[dotenv plugin](https://github.com/dsdolzhenko/gradle-dotenv-plugin)'s settings plugin. For
+that, apply this plugin's settings counterpart instead:
+
+```kotlin
+// settings.gradle.kts
+plugins {
+    id("io.github.dsdolzhenko.secrets.settings") version "<version>"
+}
+
+secrets {
+    cliPath.set("op") // Path to 1Password CLI
+    account.set("my-account") // Optional: specific account
+    cliTimeout.set(30) // Timeout in seconds
+}
+
+dotenv {
+    files.set(listOf(".env", ".env.local"))
+}
+```
+
+This applies `io.github.dsdolzhenko.dotenv.settings` automatically and wires itself into the
+shared `dotenv` extension, so any `.env` value that is (or contains) an `op://...` reference
+comes back already resolved wherever `dotenv.get(...)`/`dotenv[...]` is called — both in
+`settings.gradle.kts` and in every project's `build.gradle.kts` — with no further code
+changes needed:
+
+```kotlin
+// build.gradle.kts
+val spaceToken: String = dotenv["SPACE_TOKEN"] ?: "" // resolved if it was an op:// reference
+
+repositories {
+    maven {
+        url = uri("https://packages.jetbrains.team/maven/p/crl/maven")
+        credentials {
+            username = dotenv["SPACE_USERNAME"] ?: ""
+            password = spaceToken
+        }
+    }
+}
+```
+
+Configure the `secrets { ... }` block before the first `dotenv.get(...)`/`dotenv[...]` call
+that should be resolved, since the 1Password resolver is built lazily from whatever
+configuration is in place at that point.
+
 ## Development
 
 ### Building the plugin
