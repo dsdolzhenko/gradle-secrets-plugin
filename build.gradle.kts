@@ -1,16 +1,17 @@
-val gitVersion: groovy.lang.Closure<String> by extra
+@Suppress("UNCHECKED_CAST")
+val gitVersion = extra["gitVersion"] as groovy.lang.Closure<String>
 
-val githubUsername: String by extra {
+val githubUsername: String =
     findProperty("githubUsername")?.toString()
         ?: System.getenv("GITHUB_ACTOR")?.ifEmpty { null }
         ?: ""
-}
+extra.set("githubUsername", githubUsername)
 
-val githubToken: String by extra {
+val githubToken: String =
     findProperty("githubToken")?.toString()
         ?: System.getenv("GITHUB_TOKEN")?.ifEmpty { null }
         ?: ""
-}
+extra.set("githubToken", githubToken)
 
 plugins {
     kotlin("jvm") version "2.3.21"
@@ -76,7 +77,7 @@ tasks.test {
 // to apply io.github.dsdolzhenko.dotenv.settings by id. Resolved via its own configuration
 // (rather than testRuntimeClasspath) to avoid a cycle through this task's own output, which
 // testRuntimeClasspath includes.
-val dotenvPluginRuntime: Configuration by configurations.creating
+val dotenvPluginRuntime: Configuration = configurations.create("dotenvPluginRuntime")
 dependencies {
     dotenvPluginRuntime("io.github.dsdolzhenko:gradle-dotenv-plugin:$dotenvPluginVersion")
 }
