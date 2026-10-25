@@ -144,7 +144,13 @@ class SecretsInjector(
         // Collect all project properties with secrets
         val propertiesToResolve = mutableMapOf<String, String>()
 
-        project.properties.forEach { (propertyName, value) ->
+        // project.properties is deprecated (removed in Gradle 10); gradle.properties/-P/env
+        // properties and ext properties are the two sources that can actually carry secrets.
+        val candidateProperties = LinkedHashMap<String, Any?>()
+        candidateProperties.putAll(project.providers.gradlePropertiesPrefixedBy("").get())
+        candidateProperties.putAll(project.extensions.extraProperties.properties)
+
+        candidateProperties.forEach { (propertyName, value) ->
             if (value is String && shouldProcessProperty(propertyName)) {
                 if (secretsResolver.containsReference(value)) {
                     // Store original value
