@@ -16,11 +16,11 @@ extra.set(
 )
 
 plugins {
-    kotlin("jvm") version "2.3.21"
-    kotlin("plugin.serialization") version "2.3.21"
-    id("com.palantir.git-version") version "5.0.0"
+    kotlin("jvm") version "2.4.21"
+    kotlin("plugin.serialization") version "2.4.21"
+    id("com.palantir.git-version") version "5.1.0"
     id("java-gradle-plugin")
-    id("com.gradle.plugin-publish") version "2.1.1"
+    id("com.gradle.plugin-publish") version "2.2.1"
 }
 
 group = "io.github.dsdolzhenko"
@@ -28,7 +28,7 @@ version = gitVersion()
 
 // Version of the companion dotenv plugin that first exposes
 // DotEnvSettingsExtension.resolveValuesWith, which the secrets settings plugin hooks into.
-val dotenvPluginVersion = "0.3.1"
+val dotenvPluginVersion = "0.3.2"
 
 repositories {
     mavenCentral()
@@ -37,7 +37,7 @@ repositories {
 }
 
 dependencies {
-    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.11.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.12.0")
     compileOnly("io.github.dsdolzhenko:gradle-dotenv-plugin:$dotenvPluginVersion")
     testImplementation(kotlin("test"))
     testImplementation(gradleTestKit())
